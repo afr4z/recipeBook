@@ -1,73 +1,68 @@
-from os import stat
-from tkinter.messagebox import NO
+import enum
 from fastapi import FastAPI, Response, status, HTTPException
 from fastapi.params import Body
 from pydantic import BaseModel
-import psycopg2
-from psycopg2.extras import RealDictCursor
-import time
+from random import randrange
 
 class Post(BaseModel):
     title: str
     difficulty: int = 1
     content: str
+    id:int = 0
     
 
 app = FastAPI()
 
-while True:
-    try:
-        conn = psycopg2.connect(host='ec2-52-205-61-230.compute-1.amazonaws.com', database='df1c1ffdaieq59', user='apghhttwqtbbve', password='cc53cc413ffaec4f2d529a50a3fc79ce91ec883391a57662f4f4df97c5af0464', cursor_factory=RealDictCursor)
-        cursor=conn.cursor()
-        print("database connection successful")
-        break
-    except Exception as error:
-        print("connecting to database failed")
-        print("error:",error)
-        time.sleep(2)
+my_recipes=[{"title": "post 1","content":"content of post 1",'id':1},{"title":"post 2","content":"content of post 2",'id':2}]
 
+def find_post(id):
+    for p in my_recipes:
+        if p["id"]==id:
+            return p
 
+def find_index(id):
+    for i , p in enumerate(my_recipes):
+        if p["id"]==id:
+                return i
+
+@app.get("/")
+def root():
+    return{"message":"Hello world"}
 
 @app.get("/recipes/all")
 async def getPosts():
-    cursor.execute('''SELECT * FROM recipes''')
-    my_recipes=cursor.fetchall()
     return{"data":my_recipes}
     
 @app.get("/recipes/{id}")
 async def getPost(id : int, response: Response):
-    cursor.execute('''SELECT * FROM recipes WHERE id =%s ''',(str(id)))
-    recipe = cursor.fetchone()
-    if not recipe:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"post with id:{id} does not exist  ")
+    recipe=find_post(id)
+    if recipe == None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    
     return{"data":recipe}
 
 @app.post("/recipes", status_code=status.HTTP_201_CREATED)
 def create(post: Post):
-    cursor.execute("""INSERT INTO recipes (name, content, difficulty) VALUES (%s,%s,%s) RETURNING *""", (post.title, post.content, post.difficulty))
-    new_post=cursor.fetchone()
-    conn.commit()
+    new_post=post.dict()
+    new_post['id']=randrange(0,1000000)
+    my_recipes.append(new_post)
 
     return{'data':new_post}
 
 @app.delete("/recipes/{id}" ,status_code=status.HTTP_204_NO_CONTENT)
 def delete(id:int):
-    cursor.execute('''DELETE FROM recipes WHERE id = %s RETURNING *''',(str(id)))
-    recipe= cursor.fetchone
-    conn.commit()
-
-    if recipe == None:
+    index=find_index(id)
+    if  index == None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    my_recipes.pop(find_index(id))
+    return{'message':"post deleted"}
 
 @app.put("/recipes/{id}",status_code=status.HTTP_206_PARTIAL_CONTENT)
 def update(id:int, post:Post):
-    cursor.execute('''UPDATE recipes SET name= %s , content= %s, difficulty = %sWHERE id = %s RETURNING *''', (post.title, post.content, post.difficulty, (str(id))))
-    updatedPost= cursor.fetchone()
-    print(updatedPost)
-    conn.commit()
-    
-    if updatedPost==None:
+    index=find_index(id)
+    if  index == None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-
-    return{'data': updatedPost}
+    post_dict=post.dict()
+    post_dict['id']=id
+    my_recipes[index]=post_dict
+    return{'data': post_dict}
