@@ -27,7 +27,7 @@ def find_index(id):
 
 @app.get("/")
 def root():
-    return{"message":"Hello world"}
+    return{"message":"go to /docs to try out the api"}
 
 @app.get("/recipes/all")
 async def getPosts():
